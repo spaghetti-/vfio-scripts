@@ -45,17 +45,52 @@ function unbind_fb_vtconsole() {
 	perror "[*] removing efifb and vtconsole binding"
 	perror "[!!] you WILL lose console"
 	echo "efi-framebuffer.0" > /sys/bus/platform/drivers/efi-framebuffer/unbind
-	echo 0 > /sys/class/vtconsole/vtcon{0,1}/bind
+	sleep 1
+	echo 0 > /sys/class/vtconsole/vtcon0/bind
+	sleep 1
+	echo 0 > /sys/class/vtconsole/vtcon1/bind
 }
 
-bus_rescan
-driver_bind $GPU vfio-pci
-driver_bind $GPU_SND vfio-pci
-remove_pci_bridge
-unbind_fb_vtconsole
+function rebind_fb_vtconsole() {
+	#echo "efi-framebuffer.0" > /sys/bus/platform/drivers/efi-framebuffer/bind
+	echo 1 > /sys/class/vtconsole/vtcon0/bind
+	sleep 1
+	echo 1 > /sys/class/vtconsole/vtcon1/bind
+}
 
-perror "[*] switching monitor 1 to mDP"
-ddccontrol -r 0x60 -w 16 dev:/dev/i2c-3
+#
+function intel() {
+	killall X
+	sleep 5
 
-touch /tmp/vm.lock
-su alex -c startx
+	#unbind_fb_vtconsole
+	driver_bind $GPU vfio-pci
+	driver_bind $GPU_SND vfio-pci
+	remove_pci_bridge
+
+	perror "[*] switching monitor 1 to mDP"
+	ddccontrol -r 0x60 -w 16 dev:/dev/i2c-3
+
+	touch /tmp/vm.lock
+	su alex -c startx
+}
+
+function host() {
+	killall X
+	sleep 5
+
+	driver_bind $GPU nvidia
+	driver_bind $GPU_SND snd_hda_intel
+	bus_rescan
+
+	rm /tmp/vm.lock
+	ddccontrol -r 0x60 -w 15 dev:/dev/i2c-3
+	#rebind_fb_vtconsole()
+	su alex -c startx
+}
+
+if [ "$1" == "vm" ]; then
+	intel
+elif [ "$1" == "host" ]; then
+	host
+fi
